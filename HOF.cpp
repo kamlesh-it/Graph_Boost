@@ -49,7 +49,7 @@ const double distance_error = 1e-2;
 const double length_NH = 1.00577;
 const double length_HO = 2.62; //1.97436;
 const double length_ON = 3.07;
-//const double angle_NHO = 100; // degrees
+const double max_angle_NHO = 100; // degrees
 //const double distance_ON = 2.82822; // min distance between N/O atoms in adjacent molecules 
 const double big_constant = 1e+8;
 
@@ -463,9 +463,8 @@ bool Linked_ON (Molecule& m0, Molecule& m1, double distance_ON)
     return linked;
 }*/
 
-bool Linked_NHO (Molecule& m0, Molecule& m1, double& gap_HO)  // I could not understand the operations within this function.
+bool Linked_NHO (Molecule& m0, Molecule& m1)  // I could not understand the operations within this function.
 {
-    gap_HO = big_constant;
     bool linked = false;
     for ( int i = 0; i < m0.atoms['N'].size(); i++ )
     {
@@ -474,16 +473,11 @@ bool Linked_NHO (Molecule& m0, Molecule& m1, double& gap_HO)  // I could not und
         {
             Point3d vector_HO = m1.atoms['O'][j].point_a - m0.atoms['H'][ index_H ].point_a;
             double distance_HO = norm( vector_HO );
-            if ( distance_HO > length_HO )
-            {
-                if ( gap_HO > distance_HO ) gap_HO = distance_HO;
-                continue;
-            }
-            //std::cout<<"\nN"<<m0.atoms['N'][i].index<<"H"<<index_H+1<<"O"<<m1.atoms['O'][j].index<<"="<<distance_HO;
+             //std::cout<<"\nN"<<m0.atoms['N'][i].index<<"H"<<index_H+1<<"O"<<m1.atoms['O'][j].index<<"="<<distance_HO;
             double distance_ON = norm( m0.atoms['N'][i].point_a - m1.atoms['O'][j].point_a );
             if ( distance_ON > length_ON ) continue; //std::cout<<"\nPotential Error: distance_ON="<<distance_ON;
             double angle_NHO = Angle_Positive( m0.atoms['N'][i].point_a - m0.atoms['H'][ index_H ].point_a, vector_HO );
-            if ( angle_NHO < 100 ) continue; //std::cout<<"\nPotential Error: angle_NHO="<<angle_NHO;
+            if ( angle_NHO < max_angle_NHO ) continue; //std::cout<<"\nPotential Error: angle_NHO="<<angle_NHO;
             linked = true;
             break;
         }
