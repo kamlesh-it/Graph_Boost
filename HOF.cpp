@@ -7,6 +7,7 @@
 #include <utility>
 #include <algorithm>
 #include <limits>
+#include <cstdlib>
 
 //Boost
 #define BOOST_FILESYSTEM_NO_DEPRECATED
@@ -50,7 +51,7 @@ const double length_NH = 1.00577;
 const double length_HO = 2.62; //1.97436;
 const double length_ON = 3.07;
 const double max_angle_NHO = 100; // degrees
-//const double distance_ON = 2.82822; // min distance between N/O atoms in adjacent molecules 
+//const double distance_ON = 2.82822; // min distance between N/O atoms in adjacent molecules
 const double big_constant = 1e+8;
 
 Point3d V (Vector v) { return Point3d( v(0), v(1), v(2) ); }
@@ -200,12 +201,12 @@ public:
             Point2d carbon_axis_xy( carbon_axis.x, carbon_axis.y );
             carbon_angle_hor = Angle_Signed( Point2d(1,0), carbon_axis_xy );
         }
-        // Find oxygen_rays; 
+        // Find oxygen_rays;
         for ( int i = 0; i < atoms['O'].size(); i++ ) oxygen_rays.push_back( atoms['O'][i].point_a - centre );
         Matrix rotation = Eigen::MatrixXd::Identity(3,3);
         double c = cos( carbon_angle_ver * M_PI / 180 );
         rotation *= c;
-        // Find the rotation matrix to make the carbon axis vertical 
+        // Find the rotation matrix to make the carbon axis vertical
         if ( carbon_angle_ver > 0 )
         {
             cv::Point3d a( 0, 0, 0 ); // rotation_axis
@@ -263,7 +264,7 @@ Point3d Cross_Product (Point3d v0, Point3d v1)
     return v;
 }
 
-bool Find_Rotation (Point3d v0, Point3d v1, Matrix& rotation)  //What is the purpose of calculation of rotation matrix w.r.t verties 
+bool Find_Rotation (Point3d v0, Point3d v1, Matrix& rotation)  //What is the purpose of calculation of rotation matrix w.r.t verties
 {
     double angle = Angle_Positive( v0, v1 );
     rotation = Eigen::MatrixXd::Identity(3,3);
@@ -271,7 +272,7 @@ bool Find_Rotation (Point3d v0, Point3d v1, Matrix& rotation)  //What is the pur
     double c = cos( angle * M_PI / 180 );
     double s = sin( angle * M_PI / 180 );
     rotation *= c;
-    if ( angle == M_PI ) return true; 
+    if ( angle == M_PI ) return true;
     Point3d axis = Cross_Product( v0, v1 );
     axis *= 1.0 / norm( axis );
     rotation += s * Cross_Product( axis ) + (1-c) * Tensor_Product( axis ); //std::cout<<"\nr="<<rotation;
@@ -383,8 +384,21 @@ bool Read_idxyz (std::fstream& file, std::string& id, double& x, double& y, doub
     z = atof( col6.c_str() );
     return true;
 }
+//Read Data for NH Bond
 
-
+bool Read_NH (std::fstream & file, char & element1, char & element2, int & id1,int & id2)
+{
+    std::string line,col1,col2;
+    file >> col1;
+    if ( col1 == "loop_" ) return false;
+    file >> col2;
+    getline (file, line);
+    element1 = col1[0];
+    element2 = col2[0];
+    id1 = std::stoi( col1.erase(0,1) );
+    id2 = std::stoi( col2.erase(0,1) );
+    return true;
+}
 bool Read_cif (std::string name, Box& box, std::vector<Molecule>& molecules)
 {
     std::fstream file;
@@ -428,6 +442,7 @@ bool Read_cif (std::string name, Box& box, std::vector<Molecule>& molecules)
         if ( ind_molecule == molecules.size() ) molecules.push_back( Molecule() );
         ind_atom = ++indices[ element ];
         Atom atom( element, ind_atom, x, y ,z );
+
         atom.point_a = box.Abs_Position( atom.point_b );
         molecules[ ind_molecule ].atoms[ element ].push_back( atom );
         if ( element == 'C' )
@@ -436,6 +451,22 @@ bool Read_cif (std::string name, Box& box, std::vector<Molecule>& molecules)
             int ind = ind_atom - ind_molecule * max_indices[ element ];
             if ( ind == 1 or ind == 14 ) molecules[ ind_molecule ].c += atom.point_b;
         }
+    }
+
+    //Find Linked_NH
+    Read_Until_String( file, "_geom_bond_publ_flag");
+
+    char element1, element2;
+    int id1, id2;
+    while( Read_NH(file, element1, element2,id1, id2) )
+    {
+            if(element1 == 'N' and element2 == 'H')
+            {
+                int index_mol;
+                if(id1 % 6 == 0)index_mol = id1/ ( max_indices['N'] ) - 1;
+                else index_mol = id1/(max_indices['N']);
+                molecules [index_mol].indices_NH.push_back((id2-1)%14);
+            }
     }
     box.n_molecules = (int)molecules.size();
     box.Print();
@@ -463,8 +494,9 @@ bool Linked_ON (Molecule& m0, Molecule& m1, double distance_ON)
     return linked;
 }*/
 
-bool Linked_NHO (Molecule& m0, Molecule& m1)  // I could not understand the operations within this function.
+bool Linked_NHO (Molecule& m0, Molecule& m1,double & d)  // I could not understand the operations within this function.
 {
+
     bool linked = false;
     for ( int i = 0; i < m0.atoms['N'].size(); i++ )
     {
@@ -494,7 +526,7 @@ void Order_Neighbours (Graph& s, Vertex_it v, std::vector<Vertex_Point>& c)
     std::cout<<"\nSorted:"; for ( auto n : c ) std::cout<<" "<<n.point;
 }
 
-bool Neighbours_Equal (std::vector<Vertex_Point>const& neighbours0, std::vector<Vertex_Point>const& neighbours1) // Is it returns equal neighbours within same molecule structure 
+bool Neighbours_Equal (std::vector<Vertex_Point>const& neighbours0, std::vector<Vertex_Point>const& neighbours1) // Is it returns equal neighbours within same molecule structure
 {
     if ( neighbours0.size() != neighbours1.size() ) { std::cout<<"\nDifferent numbers of neighbours"; return false; }
     for ( int i = 0; i < neighbours0.size(); i++ )
@@ -509,7 +541,7 @@ bool Neighbours_Equal (std::vector<Vertex_Point>const& neighbours0, std::vector<
 
 bool Structures_Equal (Graph& s0, Vertex_it v0, Graph& s1, Vertex_it v1) // How it checks equalities of structure through this condition
 {
-    if ( norm( s0[ *v0 ].centre - s1[ *v1 ].centre ) > distance_error )   
+    if ( norm( s0[ *v0 ].centre - s1[ *v1 ].centre ) > distance_error )
     {
         std::cout<<"\nDifferent: "<<s0[ *v0 ].centre<<s1[ *v1 ].centre; // initial vertices
         return false;
@@ -543,11 +575,14 @@ int main()
         // Find centres and angles in the orthogonal system
         for ( int i = 0; i < molecules.size(); i++ )
         {
+
             molecules[i].internal = true;
             molecules[i].centre *= 1.0 / molecules[i].atoms['C'].size();
             molecules[i].centre = box.Abs_Position( molecules[i].centre );
             molecules[i].Find_Angles();
-            molecules[i].Find_indices_NH();
+
+          //  molecules[i].Find_indices_NH();
+            molecules[i].Print();
         }
 
         // Add molecules by 26 shifts
@@ -577,17 +612,20 @@ int main()
         std::cout<<" n=";
         Point3d c0, c1, c;
         std::vector<Index_Value> gaps_HO;   //What is the use of gaps_HO vector?
+
         for ( int i = 0; i < box.n_molecules; i++ )
         {
+
             gaps_HO.clear();
             int neighbours = 0;
             for ( int j = 0; j < molecules.size(); j++ )
             {
                 if ( i == j ) continue;
-                c0 = structures[ ind_structure ][ vertices[i] ].centre;   
+                c0 = structures[ ind_structure ][ vertices[i] ].centre;
                 c1 = structures[ ind_structure ][ vertices[j] ].centre;
                 c = c1 - c0;
                 double d = norm( c ), gap_HO;
+
                 if ( ! Linked_NHO( molecules[i], molecules[j], gap_HO ) ) { gaps_HO.push_back( Index_Value( j, gap_HO ) ); continue; }
                 neighbours++;
                 if ( ! boost::edge( vertices[i], vertices[j], structures[ ind_structure ] ).second )
@@ -657,5 +695,6 @@ int main()
     */
 
     std::cout<<"\n";
+
     return 0;
 }
