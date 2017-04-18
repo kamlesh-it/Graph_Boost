@@ -384,21 +384,22 @@ bool Read_idxyz (std::fstream& file, std::string& id, double& x, double& y, doub
     z = atof( col6.c_str() );
     return true;
 }
-//Read Data for NH Bond
 
-bool Read_NH (std::fstream & file, char & element1, char & element2, int & id1,int & id2)
+//Read links between atomsData for NH Bond
+bool Read_Links (std::fstream & file, char & element1, char & element2, int & id1, int & id2)
 {
-    std::string line,col1,col2;
+    std::string line, col1, col2;
     file >> col1;
-    if ( col1 == "loop_" ) return false;
+    if ( col1 == "loop_" ) return false; // finished reading this section
     file >> col2;
-    getline (file, line);
-    element1 = col1[0];
+    getline( file, line );
+    element1 = col1[0]; // the first character in the string is the chemical element
     element2 = col2[0];
-    id1 = std::stoi( col1.erase(0,1) );
+    id1 = std::stoi( col1.erase(0,1) ); // extract the integer index after the element character
     id2 = std::stoi( col2.erase(0,1) );
     return true;
 }
+
 bool Read_cif (std::string name, Box& box, std::vector<Molecule>& molecules)
 {
     std::fstream file;
@@ -453,20 +454,19 @@ bool Read_cif (std::string name, Box& box, std::vector<Molecule>& molecules)
         }
     }
 
-    //Find Linked_NH
+    //Find NH links between atoms
     Read_Until_String( file, "_geom_bond_publ_flag");
-
     char element1, element2;
     int id1, id2;
-    while( Read_NH(file, element1, element2,id1, id2) )
+    while( Read_Links( file, element1, element2, id1, id2 ) )
     {
-            if(element1 == 'N' and element2 == 'H')
+            if ( element1 == 'N' and element2 == 'H' )
             {
                 int index_mol;
-                if(id1 % max_indices[element1] == 0)index_mol = id1/ ( max_indices['N'] ) - 1;
+                if( id1 % max_indices[ element1 ] == 0 ) index_mol = id1/ ( max_indices['N'] ) - 1;
                 else index_mol = id1/(max_indices['N']);
                 //molecules [index_mol].indices_NH.push_back((id2-1)%max_indices[element2]);
-                molecules[index_mol].indices_NH.push_back(std::make_pair(id1,id2));
+                molecules[ index_mol ].indices_NH.push_back( std::make_pair( id1, id2 ) );
             }
     }
     box.n_molecules = (int)molecules.size();
