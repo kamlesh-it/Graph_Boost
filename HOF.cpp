@@ -44,7 +44,7 @@ using namespace cv;
 
 // Constants
 const Point3d origin(0, 0, 0);
-const double M_PI=3.1472;
+//const double M_PI=3.1472;
 //const bool debug = false;
 const double distance_error = 1e-2;
 const double length_NH = 1.00577;
@@ -152,7 +152,7 @@ public:
     bool internal = false; // flag of a molecule connected to all neighbours
     double carbon_angle_ver = 0, carbon_angle_hor = 0, oxygen_angle = 0;
     std::vector<Point3d> oxygen_rays;
-
+    
     Molecule () {}
     Molecule (Molecule& molecule_old, Point3d shift)
     {
@@ -169,7 +169,7 @@ public:
             for ( int i = 0; i < it->second.size(); i++ )
                 it->second[i].point_a += shift;
     }
-
+    
     void Shift (Point3d shift, Molecule& molecule_new)
     {
         // Copy angles
@@ -188,7 +188,7 @@ public:
         std::cout<<"\ncentre="<<centre<<" C_v="<<carbon_angle_ver<<" C_h="<<carbon_angle_hor<<" O_a="<<oxygen_angle<<std::endl;
         for ( int i = 0; i < indices_NH.size(); i++ ) std::cout<<"N"<<indices_NH[i].first<<" <--->"<<" H"<<indices_NH[i].second<<std::endl;
     }
-
+    
     void Find_Angles ()
     {
         carbon_axis = atoms['C'][0].point_a - atoms['C'][13].point_a;
@@ -237,22 +237,22 @@ public:
         }
         else oxygen_angle = oxygen_angles[ min_index ];
     }
-
-  /*  bool Find_indices_NH()
-    {
-        indices_NH.assign( atoms['N'].size(), -2 );
-        for ( int i = 0; i < atoms['N'].size(); i++ )
-        {
-            for ( int j = 0; j < atoms['H'].size(); j++ )
-                if ( indices_NH[i] < 0 ) // H neighbour not found yet
-                {
-                    double distance_NH = norm( atoms['N'][i].point_a - atoms['H'][j].point_a );
-                    if ( fabs( distance_NH - length_NH ) < distance_error ) indices_NH[i] = j; //atoms['H'][j].index - 1;
-                }
-            if ( indices_NH[i] < 0 ) { std::cout<<"\nError in Find_indices_NH: no H neighbour of N"<<atoms['N'][i].index; return false; }
-        }
-        return true;
-    }*/
+    
+    /*  bool Find_indices_NH()
+     {
+     indices_NH.assign( atoms['N'].size(), -2 );
+     for ( int i = 0; i < atoms['N'].size(); i++ )
+     {
+     for ( int j = 0; j < atoms['H'].size(); j++ )
+     if ( indices_NH[i] < 0 ) // H neighbour not found yet
+     {
+     double distance_NH = norm( atoms['N'][i].point_a - atoms['H'][j].point_a );
+     if ( fabs( distance_NH - length_NH ) < distance_error ) indices_NH[i] = j; //atoms['H'][j].index - 1;
+     }
+     if ( indices_NH[i] < 0 ) { std::cout<<"\nError in Find_indices_NH: no H neighbour of N"<<atoms['N'][i].index; return false; }
+     }
+     return true;
+     }*/
 };
 
 Point3d Cross_Product (Point3d v0, Point3d v1)
@@ -321,7 +321,7 @@ bool Read_Until_Section (std::fstream& file, int section)
         if ( ! std::getline( file, line ) ) return false;
         std::istringstream stream( line );
         stream >> col1 >> col2;
-
+        
     }
     return true;
 }
@@ -422,7 +422,7 @@ bool Read_cif (std::string name, Box& box, std::vector<Molecule>& molecules)
     max_indices.insert( std::make_pair( 'C', 23 ) );
     max_indices.insert( std::make_pair( 'H', 14 ) );
     for ( auto i : max_indices ) indices.insert( std::make_pair( i.first, 0 ) );
-
+    
     // Read box parameters
     Read_Until_Section( file, 6 );
     Read_String_Value( file, "_cell_length_a", box.a );
@@ -443,7 +443,7 @@ bool Read_cif (std::string name, Box& box, std::vector<Molecule>& molecules)
         if ( ind_molecule == molecules.size() ) molecules.push_back( Molecule() );
         ind_atom = ++indices[ element ];
         Atom atom( element, ind_atom, x, y ,z );
-
+        
         atom.point_a = box.Abs_Position( atom.point_b );
         molecules[ ind_molecule ].atoms[ element ].push_back( atom );
         if ( element == 'C' )
@@ -453,21 +453,20 @@ bool Read_cif (std::string name, Box& box, std::vector<Molecule>& molecules)
             if ( ind == 1 or ind == 14 ) molecules[ ind_molecule ].c += atom.point_b;
         }
     }
-
+    
     //Find NH links between atoms
     Read_Until_String( file, "_geom_bond_publ_flag");
     char element1, element2;
     int id1, id2;
     while( Read_Links( file, element1, element2, id1, id2 ) )
     {
-            if ( element1 == 'N' and element2 == 'H' )
-            {
-                int index_mol;
-                if( id1 % max_indices[ element1 ] == 0 ) index_mol = id1/ ( max_indices['N'] ) - 1;
-                else index_mol = id1/(max_indices['N']);
-                //molecules [index_mol].indices_NH.push_back((id2-1)%max_indices[element2]);
-                molecules[ index_mol ].indices_NH.push_back( std::make_pair( id1, id2 ) );
-            }
+        if ( element1 == 'N' and element2 == 'H' )
+        {
+            int index_molecule = ( id1 - 1 ) / max_indices['N'];
+            id1 -= index_molecule * max_indices[ element1 ];
+            id2 -= index_molecule * max_indices[ element2 ];
+            molecules[ index_molecule ].indices_NH.push_back( std::make_pair( id1, id2 ) );
+        }
     }
     box.n_molecules = (int)molecules.size();
     box.Print();
@@ -475,29 +474,29 @@ bool Read_cif (std::string name, Box& box, std::vector<Molecule>& molecules)
 }
 
 /*
-bool Linked_ON (Molecule& m0, Molecule& m1, double distance_ON)
-{
-    bool linked = false;
-    for ( auto O : m0.atoms['O'] )
-        for ( auto N : m1.atoms['N'] )
-        {
-            //if ( fabs( norm( O.point_a - N.point_a ) - distance_ON ) < 1e-2 ) { return true; }
-            if ( norm( O.point_a - N.point_a ) < distance_ON ) { std::cout<<" l="<<norm( O.point_a - N.point_a ); linked = true; }
-            //else std::cout<<" ON="<<norm( O.point_a - N.point_a );
-        }
-    for ( auto O : m1.atoms['O'] )
-        for ( auto N : m0.atoms['N'] )
-        {
-            //std::cout<<" ON="<<norm( O.point_a - N.point_a );
-            if ( norm( O.point_a - N.point_a ) < distance_ON ) { std::cout<<" l="<<norm( O.point_a - N.point_a ); linked = true;  }
-            //else std::cout<<" ON="<<norm( O.point_a - N.point_a );
-        }
-    return linked;
-}*/
+ bool Linked_ON (Molecule& m0, Molecule& m1, double distance_ON)
+ {
+ bool linked = false;
+ for ( auto O : m0.atoms['O'] )
+ for ( auto N : m1.atoms['N'] )
+ {
+ //if ( fabs( norm( O.point_a - N.point_a ) - distance_ON ) < 1e-2 ) { return true; }
+ if ( norm( O.point_a - N.point_a ) < distance_ON ) { std::cout<<" l="<<norm( O.point_a - N.point_a ); linked = true; }
+ //else std::cout<<" ON="<<norm( O.point_a - N.point_a );
+ }
+ for ( auto O : m1.atoms['O'] )
+ for ( auto N : m0.atoms['N'] )
+ {
+ //std::cout<<" ON="<<norm( O.point_a - N.point_a );
+ if ( norm( O.point_a - N.point_a ) < distance_ON ) { std::cout<<" l="<<norm( O.point_a - N.point_a ); linked = true;  }
+ //else std::cout<<" ON="<<norm( O.point_a - N.point_a );
+ }
+ return linked;
+ }*/
 
 bool Linked_NHO (Molecule& m0, Molecule& m1,double & d)  // I could not understand the operations within this function.
 {
-
+    
     bool linked = false;
     for ( int i = 0; i < m0.atoms['N'].size(); i++ )
     {
@@ -506,7 +505,7 @@ bool Linked_NHO (Molecule& m0, Molecule& m1,double & d)  // I could not understa
         {
             Point3d vector_HO = m1.atoms['O'][j].point_a - m0.atoms['H'][ index_H ].point_a;
             double distance_HO = norm( vector_HO );
-             //std::cout<<"\nN"<<m0.atoms['N'][i].index<<"H"<<index_H+1<<"O"<<m1.atoms['O'][j].index<<"="<<distance_HO;
+            //std::cout<<"\nN"<<m0.atoms['N'][i].index<<"H"<<index_H+1<<"O"<<m1.atoms['O'][j].index<<"="<<distance_HO;
             double distance_ON = norm( m0.atoms['N'][i].point_a - m1.atoms['O'][j].point_a );
             if ( distance_ON > length_ON ) continue; //std::cout<<"\nPotential Error: distance_ON="<<distance_ON;
             double angle_NHO = Angle_Positive( m0.atoms['N'][i].point_a - m0.atoms['H'][ index_H ].point_a, vector_HO );
@@ -552,20 +551,21 @@ bool Structures_Equal (Graph& s0, Vertex_it v0, Graph& s1, Vertex_it v1) // How 
     Order_Neighbours( s0, v0, neighbours0 );
     Order_Neighbours( s1, v1, neighbours1 );
     if ( ! Neighbours_Equal( neighbours0, neighbours1 ) ) return false;
-
+    
     for ( int i = 0; i < neighbours0.size(); i++ )
     {
-
+        
     }
     return true;
 }
 
 int main()
 {
-    std::string data_folder = "E:/Research/molGeom/";
+    //std::string data_folder = "/Users/kurlin/C++/Datasets/MIF/HOF/molGeom/"; // Vitaliy's folder
+    std::string data_folder = "E:/Research/molGeom/"; // Kamlesh's folder
     Box box;
     std::vector<Molecule> molecules;
-    int num_structures = 50; //5688
+    int num_structures = 2; //5688
     int max_neighbours = 6;
     std::vector<Graph> structures( num_structures );
     for ( int ind_structure = 0; ind_structure < num_structures; ind_structure++ )
@@ -576,16 +576,16 @@ int main()
         // Find centres and angles in the orthogonal system
         for ( int i = 0; i < molecules.size(); i++ )
         {
-
+            
             molecules[i].internal = true;
             molecules[i].centre *= 1.0 / molecules[i].atoms['C'].size();
             molecules[i].centre = box.Abs_Position( molecules[i].centre );
             molecules[i].Find_Angles();
-
-          //  molecules[i].Find_indices_NH();
+            
+            //  molecules[i].Find_indices_NH();
             molecules[i].Print();
         }
-
+    
         // Add molecules by 26 shifts
         std::vector<Point3d> shifts;  // why this vector have their value in range of -1,0,1 for shift?
         for ( int i = -1; i <=1; i++ )
@@ -600,7 +600,7 @@ int main()
                 molecules_new.push_back( Molecule( m, box.Abs_Position( s ) ) );
         }
         molecules.insert( molecules.end(), molecules_new.begin(), molecules_new.end() );
-
+        
         // Build a structure of molecules from 26 boxes
         std::vector<Graph::vertex_descriptor> vertices( molecules.size() );
         for ( int i = 0; i < molecules.size(); i++ )
@@ -613,10 +613,10 @@ int main()
         std::cout<<" n=";
         Point3d c0, c1, c;
         std::vector<Index_Value> gaps_HO;   //What is the use of gaps_HO vector?
-
+        
         for ( int i = 0; i < box.n_molecules; i++ )
         {
-
+            
             gaps_HO.clear();
             int neighbours = 0;
             for ( int j = 0; j < molecules.size(); j++ )
@@ -626,7 +626,7 @@ int main()
                 c1 = structures[ ind_structure ][ vertices[j] ].centre;
                 c = c1 - c0;
                 double d = norm( c ), gap_HO;
-
+                
                 if ( ! Linked_NHO( molecules[i], molecules[j], gap_HO ) ) { gaps_HO.push_back( Index_Value( j, gap_HO ) ); continue; }
                 neighbours++;
                 if ( ! boost::edge( vertices[i], vertices[j], structures[ ind_structure ] ).second )
@@ -644,58 +644,58 @@ int main()
                     add_edge( vertices[i], vertices[ gaps_HO[ k ].index ], structures[ ind_structure ] ); //  Edge( c ),
                 }
             }
-
+            
         }
     }
-
+    
     /* Double lopop over structures
-    Matrix rotation_carbon, rotation_oxygen, rotation;
-    //for ( int i = 0; i < num_structures; i++ )
-    for ( int i = 0; i < 1; i++ )
-        for ( int j = i+1; j < 2; j++ ) // Two structures fixed
-        {
-            // Double loop over internal molecules
-            bool structures_equal = false;
-            for ( auto v0 = boost::vertices( structures[ i ] ).first; v0 != boost::vertices( structures[ i ] ).second; v0++ )
-                if ( structures[ i ][*v0].internal and ! structures_equal )
-                    for ( auto v1 = boost::vertices( structures[ j ] ).first; v1 != boost::vertices( structures[ j ] ).second; v1++ )
-                        if ( structures[ j ][*v1].internal and ! structures_equal ) // Two internal molecules fixed
-                        {
-                            // Transform the structure j molecule v1 to the structure i molecule v0
-                            std::cout<<"\nCompare ";
-                            structures[ i ][*v0].Print();
-                            structures[ j ][*v1].Print();
-                            //Point3d shift = structures[ i ][*v0].centre - structures[ j ][*v1].centre;
-                            Find_Rotation( structures[ i ][*v0].carbon_axis, structures[ j ][*v1].carbon_axis, rotation_carbon );
-                            Find_Rotation( structures[ i ][*v0].oxygen_rays[0], structures[ j ][*v1].oxygen_rays[0], rotation_oxygen );
-
-                            // Build the new structure applying the found transformation to all structure j molecules
-                            Graph structure;
-                            boost::copy_graph( structures[ j ], structure );
-                            Vertex_it v = boost::vertices( structure ).first, vc;
-                            for ( ; v != boost::vertices( structure ).second; v++ )
-                            {
-                                //std::cout<<"\nold="<<structure[*v].centre;
-                                structure[*v].centre -= structures[ j ][*v1].centre; // v1.centre at the origin
-                                if ( structure[*v].centre == origin ) vc = v;
-                                structure[*v].centre = V ( rotation_oxygen * rotation_carbon * V ( structure[*v].centre ) );
-                                structure[*v].centre += structures[ i ][*v0].centre;
-                                //std::cout<<" new="<<structure[*v].centre;
-
-                            }
-                            // Try 3 rotations and 1 symmetry: 6 transformations of the new structure with structure i
-
-                            if ( Structures_Equal( structures[ i ], v0, structure, vc ) ) structures_equal = true;
-
-
-
-                        }
-
-
-        }
-    */
-
+     Matrix rotation_carbon, rotation_oxygen, rotation;
+     //for ( int i = 0; i < num_structures; i++ )
+     for ( int i = 0; i < 1; i++ )
+     for ( int j = i+1; j < 2; j++ ) // Two structures fixed
+     {
+     // Double loop over internal molecules
+     bool structures_equal = false;
+     for ( auto v0 = boost::vertices( structures[ i ] ).first; v0 != boost::vertices( structures[ i ] ).second; v0++ )
+     if ( structures[ i ][*v0].internal and ! structures_equal )
+     for ( auto v1 = boost::vertices( structures[ j ] ).first; v1 != boost::vertices( structures[ j ] ).second; v1++ )
+     if ( structures[ j ][*v1].internal and ! structures_equal ) // Two internal molecules fixed
+     {
+     // Transform the structure j molecule v1 to the structure i molecule v0
+     std::cout<<"\nCompare ";
+     structures[ i ][*v0].Print();
+     structures[ j ][*v1].Print();
+     //Point3d shift = structures[ i ][*v0].centre - structures[ j ][*v1].centre;
+     Find_Rotation( structures[ i ][*v0].carbon_axis, structures[ j ][*v1].carbon_axis, rotation_carbon );
+     Find_Rotation( structures[ i ][*v0].oxygen_rays[0], structures[ j ][*v1].oxygen_rays[0], rotation_oxygen );
+     
+     // Build the new structure applying the found transformation to all structure j molecules
+     Graph structure;
+     boost::copy_graph( structures[ j ], structure );
+     Vertex_it v = boost::vertices( structure ).first, vc;
+     for ( ; v != boost::vertices( structure ).second; v++ )
+     {
+     //std::cout<<"\nold="<<structure[*v].centre;
+     structure[*v].centre -= structures[ j ][*v1].centre; // v1.centre at the origin
+     if ( structure[*v].centre == origin ) vc = v;
+     structure[*v].centre = V ( rotation_oxygen * rotation_carbon * V ( structure[*v].centre ) );
+     structure[*v].centre += structures[ i ][*v0].centre;
+     //std::cout<<" new="<<structure[*v].centre;
+     
+     }
+     // Try 3 rotations and 1 symmetry: 6 transformations of the new structure with structure i
+     
+     if ( Structures_Equal( structures[ i ], v0, structure, vc ) ) structures_equal = true;
+     
+     
+     
+     }
+     
+     
+     }
+     */
+    
     std::cout<<"\n";
-
+    
     return 0;
 }
